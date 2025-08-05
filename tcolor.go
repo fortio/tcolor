@@ -31,11 +31,9 @@ func Main() int {
 	} else {
 		log.Infof("Using 256 colors")
 	}
-
 	ap := ansipixels.NewAnsiPixels(60)
 	if err := ap.Open(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening terminal: %v\n", err)
-		os.Exit(1)
+		return log.FErrf("Error opening terminal: %v", err)
 	}
 	defer func() {
 		ap.ShowCursor()
@@ -70,6 +68,7 @@ func Main() int {
 		}
 	}
 }
+
 func Repaint(ap *ansipixels.AnsiPixels, mode int) {
 	ap.StartSyncMode()
 	ap.ClearScreen()
@@ -122,9 +121,6 @@ func showHSLColors(ap *ansipixels.AnsiPixels) {
 		ap.WriteString(tcolor.Reset + "\r\n")
 		offset := 8
 		s = float64(ll+offset) / float64(available+offset)
-		/*if s > 1.0 {
-			s = 1.0
-		}*/
 		for hh := range ap.W / 2 {
 			h = float64(hh) / float64(ap.W/2)
 			color := tcolor.HSLToRGB(h, s, l)
