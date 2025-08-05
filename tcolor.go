@@ -20,10 +20,12 @@ type State struct {
 	AP        *ansipixels.AnsiPixels
 	Mode      int
 	Lightness float64
+	Dirty     bool // Used to track if the screen needs repainting
 }
 
 func Main() int {
 	cli.ArgsHelp = " explore colors"
+	fFps := flag.Float64("fps", 60, "Frames per second for the terminal refresh rate")
 	defaultTrueColor := false
 	if os.Getenv("COLORTERM") != "" {
 		defaultTrueColor = true
@@ -37,16 +39,14 @@ func Main() int {
 	} else {
 		log.Infof("Using 256 colors")
 	}
-	ap := ansipixels.NewAnsiPixels(60)
+	ap := ansipixels.NewAnsiPixels(*fFps)
 	if err := ap.Open(); err != nil {
 		return log.FErrf("Error opening terminal: %v", err)
 	}
 	defer func() {
-		ap.ShowCursor()
 		ap.MouseTrackingOff()
 		ap.Restore()
 	}()
-	ap.HideCursor()
 	ap.MouseTrackingOn()
 	crlfWriter := &terminal.CRLFWriter{Out: os.Stdout}
 	terminal.LoggerSetup(crlfWriter)
@@ -59,6 +59,7 @@ func Main() int {
 		s.Repaint()
 		return nil
 	}
+	s.Dirty = true
 	for {
 		s.Repaint()
 		if err := ap.ReadOrResizeOrSignal(); err != nil {
@@ -68,28 +69,55 @@ func Main() int {
 			// No data, just a resize or signal, continue to next iteration.
 			continue
 		}
-		switch ap.Data[0] {
+		c := ap.Data[0]
+		switch c {
 		case 'q', 'Q':
 			log.Infof("Exiting on 'q' or 'Q'")
 			return 0
+		case 27: // ESC
+			s.Dirty = true
+			if len(ap.Data) >= 3 && ap.Data[1] == '[' {
+				// Arrow key
+				switch ap.Data[2] {
+				case 'D': // left arrow
+					s.Mode = (s.Mode + 3 - 1) % 3
+				case 'A': // up arrow
+					s.Lightness *= 1.05
+					if s.Lightness > 1.0 {
+						s.Lightness = 1.0 // Cap lightness at 1.0
+					} else if s.Lightness <= 0.0 {
+						s.Lightness = 0.1 // if we got to 0 and use up, start at 0.1
+					}
+				case 'B': // down arrow
+					s.Lightness /= 1.05
+				case 'C': // right arrow
+					s.Mode = (s.Mode + 1) % 3
+				default:
+				}
+			}
 		default:
 			s.Mode = (s.Mode + 1) % 3
+			s.Dirty = true
 			log.Infof("Received input: %q", ap.Data)
 		}
 	}
 }
 
 func (s *State) Repaint() {
-	s.AP.StartSyncMode()
-	s.AP.ClearScreen()
-	switch s.Mode {
-	case 0:
-		s.show16colors()
-	case 1:
-		s.show256colors()
-	case 2:
-		s.showHSLColors()
+	if s.Dirty || s.Mode == 2 {
+		s.AP.StartSyncMode()
+		s.AP.ClearScreen()
+		switch s.Mode {
+		case 0:
+			s.show16colors()
+		case 1:
+			s.show256colors()
+		case 2:
+			s.showHSLColors()
+		}
+		s.Dirty = false
 	}
+	s.AP.MoveCursor(s.AP.Mx-1, s.AP.My-1)
 }
 
 func (s *State) show16colors() {
@@ -136,5 +164,5 @@ func (s *State) showHSLColors() {
 			s.AP.WriteString(color.Background() + "  ")
 		}
 	}
-	s.AP.WriteString(tcolor.Reset + "\r\nColor: HSL(hue, saturation, lightness)")
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: HSL(%.2f, %.2f, %.2f) ↑ to increase ↓ to decrease Lightness ", tcolor.Reset, hue, sat, s.Lightness)
 }
