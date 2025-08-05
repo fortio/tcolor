@@ -95,7 +95,7 @@ func show16colors(ap *ansipixels.AnsiPixels) {
 
 func show256colors(ap *ansipixels.AnsiPixels) {
 	ap.WriteString("       256 colors\r\n\n16 basic colors\r\n\n")
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
 	ap.WriteString("\033[0m\r\n\r\n216 cube\r\n")
