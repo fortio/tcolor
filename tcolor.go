@@ -164,5 +164,6 @@ func (s *State) showHSLColors() {
 			s.AP.WriteString(color.Background() + "  ")
 		}
 	}
-	s.AP.WriteAt(0, s.AP.H-1, "%sColor: HSL(%.2f, %.2f, %.2f) ↑ to increase ↓ to decrease Lightness ", tcolor.Reset, hue, sat, s.Lightness)
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: HSL(%.2f, %.2f, %.2f) ↑ to increase ↓ to decrease Lightness ",
+		tcolor.Reset, hue, sat, s.Lightness)
 }
