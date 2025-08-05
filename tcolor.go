@@ -93,18 +93,18 @@ func show16colors(ap *ansipixels.AnsiPixels) {
 }
 
 func show256colors(ap *ansipixels.AnsiPixels) {
-	ap.WriteString("       256 colors\r\n\n16 basic colors\r\n\n")
+	ap.WriteString("      256 colors\r\n\n 16 basic colors\r\n\n ")
 	for i := range 16 {
 		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
-	ap.WriteString("\033[0m\r\n\r\n216 cube\r\n")
+	ap.WriteString("\033[0m\r\n\r\n 216 cube\r\n")
 	for i := 16; i < 232; i++ {
 		if (i-16)%36 == 0 {
-			ap.WriteString("\033[0m\r\n")
+			ap.WriteString("\033[0m\r\n ")
 		}
 		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
-	ap.WriteString("\033[0m\r\n\r\nGrayscale\r\n\r\n")
+	ap.WriteString("\033[0m\r\n\r\n Grayscale\r\n\r\n ")
 	for i := 232; i < 256; i++ {
 		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
