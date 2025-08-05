@@ -125,7 +125,7 @@ func showHSLColors(ap *ansipixels.AnsiPixels) {
 		/*if s > 1.0 {
 			s = 1.0
 		}*/
-		for hh := 0; hh < ap.W/2; hh++ {
+		for hh := range ap.W / 2 {
 			h = float64(hh) / float64(ap.W/2)
 			color := tcolor.HSLToRGB(h, s, l)
 			ap.WriteString(color.Background() + "  ")
