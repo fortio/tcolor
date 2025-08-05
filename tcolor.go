@@ -47,17 +47,12 @@ func Main() int {
 	crlfWriter := &terminal.CRLFWriter{Out: os.Stdout}
 	terminal.LoggerSetup(crlfWriter)
 	mode := 0
+	ap.OnResize = func() error {
+		Repaint(ap, mode)
+		return nil
+	}
 	for {
-		ap.StartSyncMode()
-		ap.ClearScreen()
-		switch mode {
-		case 0:
-			show16colors(ap)
-		case 1:
-			show256colors(ap)
-		case 2:
-			showHSLColors(ap)
-		}
+		Repaint(ap, mode)
 		if err := ap.ReadOrResizeOrSignal(); err != nil {
 			return log.FErrf("Error reading terminal: %v", err)
 		}
@@ -75,9 +70,21 @@ func Main() int {
 		}
 	}
 }
+func Repaint(ap *ansipixels.AnsiPixels, mode int) {
+	ap.StartSyncMode()
+	ap.ClearScreen()
+	switch mode {
+	case 0:
+		show16colors(ap)
+	case 1:
+		show256colors(ap)
+	case 2:
+		showHSLColors(ap)
+	}
+}
 
 func show16colors(ap *ansipixels.AnsiPixels) {
-	ap.WriteString("       Basic 16 colors\r\n")
+	ap.WriteString("       Basic 16 colors\r\n\n")
 	for i := tcolor.Black; i <= tcolor.Gray; i++ {
 		ap.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
 	}
@@ -87,7 +94,7 @@ func show16colors(ap *ansipixels.AnsiPixels) {
 }
 
 func show256colors(ap *ansipixels.AnsiPixels) {
-	ap.WriteString("       256 colors\r\n\r\n16 basic colors\r\n")
+	ap.WriteString("       256 colors\r\n\n16 basic colors\r\n\n")
 	for i := 0; i < 16; i++ {
 		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
@@ -106,5 +113,23 @@ func show256colors(ap *ansipixels.AnsiPixels) {
 }
 
 func showHSLColors(ap *ansipixels.AnsiPixels) {
-	ap.WriteString("       HSL colors\r\n")
+	ap.WriteString("HSL colors")
+	var h, s, l float64
+	l = 0.5 // lightness
+	// leave bottom line for status
+	available := ap.H - 1 - 1
+	for ll := 1; ll < ap.H-1; ll++ {
+		ap.WriteString(tcolor.Reset + "\r\n")
+		offset := 8
+		s = float64(ll+offset) / float64(available+offset)
+		/*if s > 1.0 {
+			s = 1.0
+		}*/
+		for hh := 0; hh < ap.W/2; hh++ {
+			h = float64(hh) / float64(ap.W/2)
+			color := tcolor.HSLToRGB(h, s, l)
+			ap.WriteString(color.Background() + "  ")
+		}
+	}
+	ap.WriteString(tcolor.Reset + "\r\nColor: HSL(hue, saturation, lightness)")
 }
