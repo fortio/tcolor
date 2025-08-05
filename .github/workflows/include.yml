@@ -1,0 +1,29 @@
+# Same as full workflow (eg from fortio/gvi) but without the goreleaser step
+name: "shared fortio workflows"
+
+on:
+    push:
+      # branches: [ main ] # put back once testing with pre-releases on branch is done.
+      tags:
+        - 'v*'
+    pull_request:
+      branches: [ main ]
+
+jobs:
+    call-gochecks:
+        uses: fortio/workflows/.github/workflows/gochecks.yml@main
+    call-codecov:
+        uses: fortio/workflows/.github/workflows/codecov.yml@main
+    call-codeql:
+        uses: fortio/workflows/.github/workflows/codeql-analysis.yml@main
+    releaser-tcolor:
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: fortio/workflows/.github/workflows/releaser.yml@main
+        with:
+            description: "Fortio terminal color picker"
+            binary_name: "tcolor"
+            dockerfile: "./Dockerfile"
+        secrets:
+            GH_PAT: ${{ secrets.GH_PAT }}
+            DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+            DOCKER_USER: ${{ secrets.DOCKER_USER }}
