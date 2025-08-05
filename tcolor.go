@@ -85,8 +85,8 @@ func Main() int {
 					s.Lightness *= 1.05
 					if s.Lightness > 1.0 {
 						s.Lightness = 1.0 // Cap lightness at 1.0
-					} else if s.Lightness <= 0.0 {
-						s.Lightness = 0.1 // if we got to 0 and use up, start at 0.1
+					} else if s.Lightness <= 1.0/255.0 {
+						s.Lightness = 1.0 / 255.0 // if we got lower than resolution and are going back up, set to 1/255
 					}
 				case 'B': // down arrow
 					s.Lightness /= 1.05
@@ -164,6 +164,6 @@ func (s *State) showHSLColors() {
 			s.AP.WriteString(color.Background() + "  ")
 		}
 	}
-	s.AP.WriteAt(0, s.AP.H-1, "%sColor: HSL(%.2f, %.2f, %.2f) ↑ to increase ↓ to decrease Lightness ",
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: HSL(%.3f, %.3f, %.3f) ↑ to increase ↓ to decrease Lightness ",
 		tcolor.Reset, hue, sat, s.Lightness)
 }

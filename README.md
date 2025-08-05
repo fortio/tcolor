@@ -27,7 +27,8 @@ brew install fortio/tap/tcolor
 
 ## Run
 
-Move the mouse wheel to zoom, arrows to increase luminance
+Currently 3 screens: Basic 16 colors, 256 Colors, and 24 bits  Hue Saturation Luminance (HSL)
+Up and down arrows to increase luminance on the HSL screen.
 
 ```sh
 tcolor help
