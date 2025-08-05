@@ -48,6 +48,11 @@ func Main() int {
 		ap.Restore()
 	}()
 	ap.MouseTrackingOn()
+	// Cursor works best with ghostty:
+	//   shell-integration-features= no-cursor
+	//   cursor-style = block_hollow
+	// Or we could do blinking block:
+	//	 ap.WriteString("\033[1 q")
 	crlfWriter := &terminal.CRLFWriter{Out: os.Stdout}
 	terminal.LoggerSetup(crlfWriter)
 	s := &State{
