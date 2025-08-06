@@ -16,11 +16,32 @@ func main() {
 	os.Exit(Main())
 }
 
+type mode int
+
+const (
+	mode16Colors mode = iota
+	mode256Colors
+	modeHSLColors
+	modeRGBColors
+	maxMode
+)
+
+type component int
+
+const (
+	componentRed component = iota
+	componentGreen
+	componentBlue
+	numColorComponents
+)
+
 type State struct {
-	AP        *ansipixels.AnsiPixels
-	Mode      int
-	Lightness float64
-	Dirty     bool // Used to track if the screen needs repainting
+	AP          *ansipixels.AnsiPixels
+	Mode        mode
+	Step        int                // Step is the lightness step for HSL colors, other color for RGB. 0-255
+	Component   component          // Component is the current color component missing/adjusted with arrows in RGB mode
+	Dirty       bool               // Used to track if the screen needs repainting
+	ColorOutput tcolor.ColorOutput // For truecolor to 256 color support
 }
 
 func Main() int {
@@ -56,11 +77,13 @@ func Main() int {
 	crlfWriter := &terminal.CRLFWriter{Out: os.Stdout}
 	terminal.LoggerSetup(crlfWriter)
 	s := &State{
-		AP:        ap,
-		Mode:      0,
-		Lightness: 0.5, // Default lightness for HSL colors
+		AP:          ap,
+		Mode:        mode16Colors, // Start with 16 colors
+		Step:        128,          // Default lightness (128/255) for HSL colors
+		ColorOutput: colorOutput,
 	}
 	ap.OnResize = func() error {
+		s.Dirty = true
 		s.Repaint()
 		return nil
 	}
@@ -72,9 +95,11 @@ func Main() int {
 		}
 		if len(ap.Data) == 0 {
 			// No data, just a resize or signal, continue to next iteration.
+			s.Dirty = false
 			continue
 		}
 		c := ap.Data[0]
+		s.Dirty = true
 		switch c {
 		case 'q', 'Q':
 			log.Infof("Exiting on 'q' or 'Q'")
@@ -82,43 +107,74 @@ func Main() int {
 		case 27: // ESC
 			s.Dirty = true
 			if len(ap.Data) >= 3 && ap.Data[1] == '[' {
+				dir := ap.Data[2]
+				precise := false
+				if len(ap.Data) >= 6 { // Modifier sequence eg "\x1b[1;2A"
+					dir = ap.Data[5]
+					precise = true // Shift key pressed
+				}
 				// Arrow key
-				switch ap.Data[2] {
+				switch dir {
 				case 'D': // left arrow
-					s.Mode = (s.Mode + 3 - 1) % 3
+					s.PrevMode()
 				case 'A': // up arrow
-					s.Lightness *= 1.05
-					if s.Lightness > 1.0 {
-						s.Lightness = 1.0 // Cap lightness at 1.0
-					} else if s.Lightness <= 1.0/255.0 {
-						s.Lightness = 1.0 / 255.0 // if we got lower than resolution and are going back up, set to 1/255
+					if precise {
+						s.Step++
+					} else {
+						s.Step += 16 // Increase step by 16 for coarse adjustment
+					}
+					if s.Step > 255 {
+						s.Step = 255 // Cap step at 255
 					}
 				case 'B': // down arrow
-					s.Lightness /= 1.05
+					if precise {
+						s.Step--
+					} else {
+						s.Step -= 16 // Decrease step by 16 for coarse adjustment
+					}
+					if s.Step < 0 {
+						s.Step = 0 // Cap step at 0
+					}
 				case 'C': // right arrow
-					s.Mode = (s.Mode + 1) % 3
+					s.NextMode()
 				default:
 				}
 			}
+		case ' ':
+			if s.Mode == modeRGBColors {
+				s.Component = (s.Component + 1) % numColorComponents // Cycle through color components
+			} else {
+				s.NextMode() // Cycle through modes
+			}
 		default:
-			s.Mode = (s.Mode + 1) % 3
-			s.Dirty = true
-			log.Infof("Received input: %q", ap.Data)
+			s.NextMode()
 		}
 	}
 }
 
+func (s *State) PrevMode() {
+	s.Mode = (s.Mode + maxMode - 1) % maxMode // Cycle to previous mode
+	s.Dirty = true
+}
+
+func (s *State) NextMode() {
+	s.Mode = (s.Mode + 1) % maxMode // Cycle through modes
+	s.Dirty = true
+}
+
 func (s *State) Repaint() {
-	if s.Dirty || s.Mode == 2 {
+	if s.Dirty {
 		s.AP.StartSyncMode()
 		s.AP.ClearScreen()
 		switch s.Mode {
-		case 0:
+		case mode16Colors:
 			s.show16colors()
-		case 1:
+		case mode256Colors:
 			s.show256colors()
-		case 2:
+		case modeHSLColors:
 			s.showHSLColors()
+		case modeRGBColors:
+			s.showRGBColors()
 		}
 		s.Dirty = false
 	}
@@ -156,6 +212,7 @@ func (s *State) show256colors() {
 
 func (s *State) showHSLColors() {
 	s.AP.WriteString("HSL colors")
+	lightness := float64(s.Step) / 255.0
 	var hue, sat float64
 	// leave bottom line for status
 	available := s.AP.H - 1 - 1
@@ -165,10 +222,50 @@ func (s *State) showHSLColors() {
 		sat = float64(ll+offset) / float64(available+offset)
 		for hh := range s.AP.W {
 			hue = float64(hh) / float64(s.AP.W)
-			color := tcolor.HSLToRGB(hue, sat, s.Lightness)
-			s.AP.WriteString(color.Background() + " ")
+			// Use the lightness step for HSL colors
+			color := tcolor.Color{RGBColor: tcolor.HSLToRGB(hue, sat, lightness)}
+			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
 		}
 	}
-	s.AP.WriteAt(0, s.AP.H-1, "%sColor: HSL(%.3f, %.3f, %.3f) ↑ to increase ↓ to decrease Lightness ",
-		tcolor.Reset, hue, sat, s.Lightness)
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: Lightness=%.3f x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
+		tcolor.Reset, lightness, s.Step)
+}
+
+func (s *State) makeColor(x, y, z int) (tcolor.Color, string) {
+	switch s.Component {
+	case componentRed:
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: uint8(z), G: uint8(x), B: uint8(y)}}
+		return color, "Red"
+	case componentGreen:
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: uint8(x), G: uint8(z), B: uint8(y)}}
+		return color, "Green"
+	case componentBlue:
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: uint8(y), G: uint8(x), B: uint8(z)}}
+		return color, "Blue"
+	default:
+		panic("Invalid color component")
+	}
+}
+
+func (s *State) showRGBColors() {
+	s.AP.WriteString("RGB colors")
+	z := s.Step
+	var y, x int
+	// leave bottom line for status
+	available := s.AP.H - 1 - 1
+	lastL := available - 1
+	var label string
+	var color tcolor.Color
+	for l := range available {
+		s.AP.WriteString(tcolor.Reset + "\r\n")
+		y = 255 * l / lastL
+		for hh := range s.AP.W {
+			x = 255 * hh / (s.AP.W - 1)
+			// Use the lightness step for HSL colors
+			color, label = s.makeColor(x, y, z)
+			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
+		}
+	}
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: %s=%d x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
+		tcolor.Reset, label, s.Step, s.Step)
 }
