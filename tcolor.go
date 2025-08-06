@@ -7,6 +7,7 @@ import (
 
 	"fortio.org/cli"
 	"fortio.org/log"
+	"fortio.org/safecast"
 	"fortio.org/terminal"
 	"fortio.org/terminal/ansipixels"
 	"fortio.org/terminal/ansipixels/tcolor"
@@ -105,40 +106,8 @@ func Main() int {
 			log.Infof("Exiting on 'q' or 'Q'")
 			return 0
 		case 27: // ESC
-			s.Dirty = true
 			if len(ap.Data) >= 3 && ap.Data[1] == '[' {
-				dir := ap.Data[2]
-				precise := false
-				if len(ap.Data) >= 6 { // Modifier sequence eg "\x1b[1;2A"
-					dir = ap.Data[5]
-					precise = true // Shift key pressed
-				}
-				// Arrow key
-				switch dir {
-				case 'D': // left arrow
-					s.PrevMode()
-				case 'A': // up arrow
-					if precise {
-						s.Step++
-					} else {
-						s.Step += 16 // Increase step by 16 for coarse adjustment
-					}
-					if s.Step > 255 {
-						s.Step = 255 // Cap step at 255
-					}
-				case 'B': // down arrow
-					if precise {
-						s.Step--
-					} else {
-						s.Step -= 16 // Decrease step by 16 for coarse adjustment
-					}
-					if s.Step < 0 {
-						s.Step = 0 // Cap step at 0
-					}
-				case 'C': // right arrow
-					s.NextMode()
-				default:
-				}
+				s.processArrowKey()
 			}
 		case ' ':
 			if s.Mode == modeRGBColors {
@@ -149,6 +118,41 @@ func Main() int {
 		default:
 			s.NextMode()
 		}
+	}
+}
+
+func (s *State) processArrowKey() {
+	dir := s.AP.Data[2]
+	precise := false
+	if len(s.AP.Data) >= 6 { // Modifier sequence eg "\x1b[1;2A"
+		dir = s.AP.Data[5]
+		precise = true // Shift key pressed
+	}
+	// Arrow key
+	switch dir {
+	case 'D': // left arrow
+		s.PrevMode()
+	case 'A': // up arrow
+		if precise {
+			s.Step++
+		} else {
+			s.Step += 16 // Increase step by 16 for coarse adjustment
+		}
+		if s.Step > 255 {
+			s.Step = 255 // Cap step at 255
+		}
+	case 'B': // down arrow
+		if precise {
+			s.Step--
+		} else {
+			s.Step -= 16 // Decrease step by 16 for coarse adjustment
+		}
+		if s.Step < 0 {
+			s.Step = 0 // Cap step at 0
+		}
+	case 'C': // right arrow
+		s.NextMode()
+	default:
 	}
 }
 
@@ -175,6 +179,8 @@ func (s *State) Repaint() {
 			s.showHSLColors()
 		case modeRGBColors:
 			s.showRGBColors()
+		default:
+			panic("invalid mode")
 		}
 		s.Dirty = false
 	}
@@ -231,16 +237,17 @@ func (s *State) showHSLColors() {
 		tcolor.Reset, lightness, s.Step)
 }
 
-func (s *State) makeColor(x, y, z int) (tcolor.Color, string) {
+func (s *State) makeColor(xi, yi, zi int) (tcolor.Color, string) {
+	x, y, z := safecast.MustConvert[uint8](xi), safecast.MustConvert[uint8](yi), safecast.MustConvert[uint8](zi)
 	switch s.Component {
 	case componentRed:
-		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: uint8(z), G: uint8(x), B: uint8(y)}}
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: z, G: x, B: y}}
 		return color, "Red"
 	case componentGreen:
-		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: uint8(x), G: uint8(z), B: uint8(y)}}
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: x, G: z, B: y}}
 		return color, "Green"
 	case componentBlue:
-		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: uint8(y), G: uint8(x), B: uint8(z)}}
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: y, G: x, B: z}}
 		return color, "Blue"
 	default:
 		panic("Invalid color component")
