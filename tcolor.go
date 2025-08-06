@@ -268,7 +268,7 @@ func (s *State) showRGBColors() {
 		y = 255 * l / lastL
 		for hh := range s.AP.W {
 			x = 255 * hh / (s.AP.W - 1)
-			// Use the lightness step for HSL colors
+			// Use the step value for the selected RGB component
 			color, label = s.makeColor(x, y, z)
 			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
 		}
