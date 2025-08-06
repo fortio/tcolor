@@ -163,10 +163,10 @@ func (s *State) showHSLColors() {
 		s.AP.WriteString(tcolor.Reset + "\r\n")
 		offset := 8
 		sat = float64(ll+offset) / float64(available+offset)
-		for hh := range s.AP.W / 2 {
-			hue = float64(hh) / float64(s.AP.W/2)
+		for hh := range s.AP.W {
+			hue = float64(hh) / float64(s.AP.W)
 			color := tcolor.HSLToRGB(hue, sat, s.Lightness)
-			s.AP.WriteString(color.Background() + "  ")
+			s.AP.WriteString(color.Background() + " ")
 		}
 	}
 	s.AP.WriteAt(0, s.AP.H-1, "%sColor: HSL(%.3f, %.3f, %.3f) ↑ to increase ↓ to decrease Lightness ",
