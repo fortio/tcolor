@@ -7,6 +7,7 @@ import (
 
 	"fortio.org/cli"
 	"fortio.org/log"
+	"fortio.org/safecast"
 	"fortio.org/terminal"
 	"fortio.org/terminal/ansipixels"
 	"fortio.org/terminal/ansipixels/tcolor"
@@ -16,8 +17,37 @@ func main() {
 	os.Exit(Main())
 }
 
+type mode int
+
+const (
+	mode16Colors mode = iota
+	mode256Colors
+	modeHSLColors
+	modeRGBColors
+	maxMode
+)
+
+type component int
+
+const (
+	componentRed component = iota
+	componentGreen
+	componentBlue
+	numColorComponents
+)
+
+type State struct {
+	AP          *ansipixels.AnsiPixels
+	Mode        mode
+	Step        int                // Step is the lightness step for HSL colors, other color for RGB. 0-255
+	Component   component          // Component is the current color component missing/adjusted with arrows in RGB mode
+	Dirty       bool               // Used to track if the screen needs repainting
+	ColorOutput tcolor.ColorOutput // For truecolor to 256 color support
+}
+
 func Main() int {
 	cli.ArgsHelp = " explore colors"
+	fFps := flag.Float64("fps", 60, "Frames per second for the terminal refresh rate")
 	defaultTrueColor := false
 	if os.Getenv("COLORTERM") != "" {
 		defaultTrueColor = true
@@ -31,101 +61,218 @@ func Main() int {
 	} else {
 		log.Infof("Using 256 colors")
 	}
-	ap := ansipixels.NewAnsiPixels(60)
+	ap := ansipixels.NewAnsiPixels(*fFps)
 	if err := ap.Open(); err != nil {
 		return log.FErrf("Error opening terminal: %v", err)
 	}
 	defer func() {
-		ap.ShowCursor()
 		ap.MouseTrackingOff()
 		ap.Restore()
 	}()
-	ap.HideCursor()
 	ap.MouseTrackingOn()
+	// Cursor works best with ghostty:
+	//   shell-integration-features= no-cursor
+	//   cursor-style = block_hollow
+	// Or we could do blinking block:
+	//	 ap.WriteString("\033[1 q")
 	crlfWriter := &terminal.CRLFWriter{Out: os.Stdout}
 	terminal.LoggerSetup(crlfWriter)
-	mode := 0
+	s := &State{
+		AP:          ap,
+		Mode:        mode16Colors, // Start with 16 colors
+		Step:        128,          // Default lightness (128/255) for HSL colors
+		ColorOutput: colorOutput,
+	}
 	ap.OnResize = func() error {
-		Repaint(ap, mode)
+		s.Dirty = true
+		s.Repaint()
 		return nil
 	}
+	s.Dirty = true
 	for {
-		Repaint(ap, mode)
+		s.Repaint()
 		if err := ap.ReadOrResizeOrSignal(); err != nil {
 			return log.FErrf("Error reading terminal: %v", err)
 		}
 		if len(ap.Data) == 0 {
 			// No data, just a resize or signal, continue to next iteration.
+			s.Dirty = false
 			continue
 		}
-		switch ap.Data[0] {
+		c := ap.Data[0]
+		s.Dirty = true
+		switch c {
 		case 'q', 'Q':
 			log.Infof("Exiting on 'q' or 'Q'")
 			return 0
+		case 27: // ESC
+			if len(ap.Data) >= 3 && ap.Data[1] == '[' {
+				s.processArrowKey()
+			}
+		case ' ':
+			if s.Mode == modeRGBColors {
+				s.Component = (s.Component + 1) % numColorComponents // Cycle through color components
+			} else {
+				s.NextMode() // Cycle through modes
+			}
 		default:
-			mode = (mode + 1) % 3
-			log.Infof("Received input: %q", ap.Data)
+			s.NextMode()
 		}
 	}
 }
 
-func Repaint(ap *ansipixels.AnsiPixels, mode int) {
-	ap.StartSyncMode()
-	ap.ClearScreen()
-	switch mode {
-	case 0:
-		show16colors(ap)
-	case 1:
-		show256colors(ap)
-	case 2:
-		showHSLColors(ap)
+func (s *State) processArrowKey() {
+	dir := s.AP.Data[2]
+	precise := false
+	if len(s.AP.Data) >= 6 { // Modifier sequence eg "\x1b[1;2A"
+		dir = s.AP.Data[5]
+		precise = true // Shift key pressed
+	}
+	// Arrow key
+	switch dir {
+	case 'D': // left arrow
+		s.PrevMode()
+	case 'A': // up arrow
+		if precise {
+			s.Step++
+		} else {
+			s.Step += 16 // Increase step by 16 for coarse adjustment
+		}
+		if s.Step > 255 {
+			s.Step = 255 // Cap step at 255
+		}
+	case 'B': // down arrow
+		if precise {
+			s.Step--
+		} else {
+			s.Step -= 16 // Decrease step by 16 for coarse adjustment
+		}
+		if s.Step < 0 {
+			s.Step = 0 // Cap step at 0
+		}
+	case 'C': // right arrow
+		s.NextMode()
+	default:
 	}
 }
 
-func show16colors(ap *ansipixels.AnsiPixels) {
-	ap.WriteString("       Basic 16 colors\r\n\n")
+func (s *State) PrevMode() {
+	s.Mode = (s.Mode + maxMode - 1) % maxMode // Cycle to previous mode
+	s.Dirty = true
+}
+
+func (s *State) NextMode() {
+	s.Mode = (s.Mode + 1) % maxMode // Cycle through modes
+	s.Dirty = true
+}
+
+func (s *State) Repaint() {
+	if s.Dirty {
+		s.AP.StartSyncMode()
+		s.AP.ClearScreen()
+		switch s.Mode {
+		case mode16Colors:
+			s.show16colors()
+		case mode256Colors:
+			s.show256colors()
+		case modeHSLColors:
+			s.showHSLColors()
+		case modeRGBColors:
+			s.showRGBColors()
+		default:
+			panic("invalid mode")
+		}
+		s.Dirty = false
+	}
+	s.AP.MoveCursor(s.AP.Mx-1, s.AP.My-1)
+}
+
+func (s *State) show16colors() {
+	s.AP.WriteString("       Basic 16 colors\r\n\n")
 	for i := tcolor.Black; i <= tcolor.Gray; i++ {
-		ap.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
+		s.AP.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
 	}
 	for i := tcolor.DarkGray; i <= tcolor.White; i++ {
-		ap.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
+		s.AP.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
 	}
 }
 
-func show256colors(ap *ansipixels.AnsiPixels) {
-	ap.WriteString("      256 colors\r\n\n 16 basic colors\r\n\n ")
+func (s *State) show256colors() {
+	s.AP.WriteString("      256 colors\r\n\n 16 basic colors\r\n\n ")
 	for i := range 16 {
-		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
+		s.AP.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
-	ap.WriteString("\033[0m\r\n\r\n 216 cube\r\n")
+	s.AP.WriteString("\033[0m\r\n\r\n 216 cube\r\n")
 	for i := 16; i < 232; i++ {
 		if (i-16)%36 == 0 {
-			ap.WriteString("\033[0m\r\n ")
+			s.AP.WriteString("\033[0m\r\n ")
 		}
-		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
+		s.AP.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
-	ap.WriteString("\033[0m\r\n\r\n Grayscale\r\n\r\n ")
+	s.AP.WriteString("\033[0m\r\n\r\n Grayscale\r\n\r\n ")
 	for i := 232; i < 256; i++ {
-		ap.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
+		s.AP.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
 	}
-	ap.WriteString(tcolor.Reset)
+	s.AP.WriteString(tcolor.Reset)
 }
 
-func showHSLColors(ap *ansipixels.AnsiPixels) {
-	ap.WriteString("HSL colors")
-	var h, s, l float64
-	l = 0.5 // lightness
+func (s *State) showHSLColors() {
+	s.AP.WriteString("HSL colors")
+	lightness := float64(s.Step) / 255.0
+	var hue, sat float64
 	// leave bottom line for status
-	available := ap.H - 1 - 1
-	for ll := 1; ll < ap.H-1; ll++ {
-		ap.WriteString(tcolor.Reset + "\r\n")
+	available := s.AP.H - 1 - 1
+	for ll := 1; ll < s.AP.H-1; ll++ {
+		s.AP.WriteString(tcolor.Reset + "\r\n")
 		offset := 8
-		s = float64(ll+offset) / float64(available+offset)
-		for hh := range ap.W / 2 {
-			h = float64(hh) / float64(ap.W/2)
-			color := tcolor.HSLToRGB(h, s, l)
-			ap.WriteString(color.Background() + "  ")
+		sat = float64(ll+offset) / float64(available+offset)
+		for hh := range s.AP.W {
+			hue = float64(hh) / float64(s.AP.W)
+			// Use the lightness step for HSL colors
+			color := tcolor.Color{RGBColor: tcolor.HSLToRGB(hue, sat, lightness)}
+			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
 		}
 	}
-	ap.WriteString(tcolor.Reset + "\r\nColor: HSL(hue, saturation, lightness)")
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: Lightness=%.3f x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
+		tcolor.Reset, lightness, s.Step)
+}
+
+func (s *State) makeColor(xi, yi, zi int) (tcolor.Color, string) {
+	x, y, z := safecast.MustConvert[uint8](xi), safecast.MustConvert[uint8](yi), safecast.MustConvert[uint8](zi)
+	switch s.Component {
+	case componentRed:
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: z, G: x, B: y}}
+		return color, "Red"
+	case componentGreen:
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: x, G: z, B: y}}
+		return color, "Green"
+	case componentBlue:
+		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: y, G: x, B: z}}
+		return color, "Blue"
+	default:
+		panic("Invalid color component")
+	}
+}
+
+func (s *State) showRGBColors() {
+	s.AP.WriteString("RGB colors")
+	z := s.Step
+	var y, x int
+	// leave bottom line for status
+	available := s.AP.H - 1 - 1
+	lastL := available - 1
+	var label string
+	var color tcolor.Color
+	for l := range available {
+		s.AP.WriteString(tcolor.Reset + "\r\n")
+		y = 255 * l / lastL
+		for hh := range s.AP.W {
+			x = 255 * hh / (s.AP.W - 1)
+			// Use the step value for the selected RGB component
+			color, label = s.makeColor(x, y, z)
+			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
+		}
+	}
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: %s=%d x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
+		tcolor.Reset, label, s.Step, s.Step)
 }
