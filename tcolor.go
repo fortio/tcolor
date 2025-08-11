@@ -48,11 +48,7 @@ type State struct {
 func Main() int {
 	cli.ArgsHelp = " explore colors"
 	fFps := flag.Float64("fps", 60, "Frames per second for the terminal refresh rate")
-	defaultTrueColor := false
-	if os.Getenv("COLORTERM") != "" {
-		defaultTrueColor = true
-	}
-	fTrueColor := flag.Bool("true-color", defaultTrueColor,
+	fTrueColor := flag.Bool("truecolor", ansipixels.DetectColorMode().TrueColor,
 		"Use true color (24-bit RGB) instead of 8-bit ANSI colors (default is true if COLORTERM is set)")
 	cli.Main()
 	colorOutput := tcolor.ColorOutput{TrueColor: *fTrueColor}
@@ -224,12 +220,12 @@ func (s *State) showHSLColors() {
 	available := s.AP.H - 1 - 1
 	for ll := 1; ll < s.AP.H-1; ll++ {
 		s.AP.WriteString(tcolor.Reset + "\r\n")
-		offset := 8
+		offset := 8 // skip some of the gray-er colors (low saturation)
 		sat = float64(ll+offset) / float64(available+offset)
 		for hh := range s.AP.W {
 			hue = float64(hh) / float64(s.AP.W)
 			// Use the lightness step for HSL colors
-			color := tcolor.Color{RGBColor: tcolor.HSLToRGB(hue, sat, lightness)}
+			color := tcolor.HSLToRGB(hue, sat, lightness).Color()
 			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
 		}
 	}
@@ -241,13 +237,13 @@ func (s *State) makeColor(xi, yi, zi int) (tcolor.Color, string) {
 	x, y, z := safecast.MustConvert[uint8](xi), safecast.MustConvert[uint8](yi), safecast.MustConvert[uint8](zi)
 	switch s.Component {
 	case componentRed:
-		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: z, G: x, B: y}}
+		color := tcolor.RGBColor{R: z, G: x, B: y}.Color()
 		return color, "Red"
 	case componentGreen:
-		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: x, G: z, B: y}}
+		color := tcolor.RGBColor{R: x, G: z, B: y}.Color()
 		return color, "Green"
 	case componentBlue:
-		color := tcolor.Color{RGBColor: tcolor.RGBColor{R: y, G: x, B: z}}
+		color := tcolor.RGBColor{R: y, G: x, B: z}.Color()
 		return color, "Blue"
 	default:
 		panic("Invalid color component")
