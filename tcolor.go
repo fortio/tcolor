@@ -39,10 +39,11 @@ const (
 type State struct {
 	AP          *ansipixels.AnsiPixels
 	Mode        mode
-	Step        int                // Step is the lightness step for HSL colors, other color for RGB. 0-255
-	Component   component          // Component is the current color component missing/adjusted with arrows in RGB mode
-	Dirty       bool               // Used to track if the screen needs repainting
-	ColorOutput tcolor.ColorOutput // For truecolor to 256 color support
+	Step        int                     // Step is the lightness step for HSL colors, other color for RGB. 0-255
+	Component   component               // Component is the current color component missing/adjusted with arrows in RGB mode
+	Dirty       bool                    // Used to track if the screen needs repainting
+	ColorOutput tcolor.ColorOutput      // For truecolor to 256 color support
+	MouseAt     map[[2]int]tcolor.Color // MouseAt tracks mouse positions and colors at those positions
 }
 
 func Main() int {
@@ -63,9 +64,11 @@ func Main() int {
 	}
 	defer func() {
 		ap.MouseTrackingOff()
+		// ap.ShowCursor()
 		ap.Restore()
 	}()
 	ap.MouseTrackingOn()
+	// ap.HideCursor()
 	// Cursor works best with ghostty:
 	//   shell-integration-features= no-cursor
 	//   cursor-style = block_hollow
@@ -78,12 +81,14 @@ func Main() int {
 		Mode:        mode16Colors, // Start with 16 colors
 		Step:        128,          // Default lightness (128/255) for HSL colors
 		ColorOutput: colorOutput,
+		MouseAt:     make(map[[2]int]tcolor.Color),
 	}
 	ap.OnResize = func() error {
 		s.Dirty = true
 		s.Repaint()
 		return nil
 	}
+	ap.OnMouse = s.OnMouse
 	s.Dirty = true
 	for {
 		s.Repaint()
@@ -115,6 +120,16 @@ func Main() int {
 			s.NextMode()
 		}
 	}
+}
+
+func (s *State) OnMouse() {
+	x, y := s.AP.Mx, s.AP.My
+	if color, ok := s.MouseAt[[2]int{x, y}]; ok {
+		s.AP.WriteRight(s.AP.H-1, "    %s   %d,%d   %s %s", color.Background(), x, y, tcolor.Reset, color.String())
+	} else {
+		s.AP.WriteRight(s.AP.H-1, "            %d,%d           ", x, y)
+	}
+	s.AP.MoveCursor(x-1, y-1)
 }
 
 func (s *State) processArrowKey() {
@@ -180,39 +195,71 @@ func (s *State) Repaint() {
 		}
 		s.Dirty = false
 	}
-	s.AP.MoveCursor(s.AP.Mx-1, s.AP.My-1)
+	s.OnMouse()
+}
+
+func (s *State) writeBasicColor(line int, i tcolor.BasicColor) int {
+	s.AP.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
+	s.MouseAt[[2]int{18, line}] = tcolor.Basic(i)
+	s.MouseAt[[2]int{19, line}] = tcolor.Basic(i)
+	s.MouseAt[[2]int{20, line}] = tcolor.Basic(i)
+	return line + 1
 }
 
 func (s *State) show16colors() {
-	s.AP.WriteString("       Basic 16 colors\r\n\n")
+	clear(s.MouseAt)
+	s.AP.WriteString("        Basic 16 colors\r\n\n")
+	line := 3 // in mouse coords 1,1 start
 	for i := tcolor.Black; i <= tcolor.Gray; i++ {
-		s.AP.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
+		line = s.writeBasicColor(line, i)
 	}
 	for i := tcolor.DarkGray; i <= tcolor.White; i++ {
-		s.AP.WriteString(fmt.Sprintf("%15s: %s   %s\r\n", i.String(), i.Background(), tcolor.Reset))
+		line = s.writeBasicColor(line, i)
 	}
+	// Also show our extra orange
+	s.AP.WriteString("\r\n Extra ansipixel named color\r\n\n")
+	line += 3
+	_ = s.writeBasicColor(line, tcolor.Orange)
+}
+
+func (s *State) write256color(i, x, line int) {
+	c := tcolor.Color256(i)
+	s.MouseAt[[2]int{x + 1, line}] = c
+	s.MouseAt[[2]int{x + 2, line}] = c
+	s.AP.WriteString(c.Background() + "  ")
 }
 
 func (s *State) show256colors() {
+	clear(s.MouseAt)
 	s.AP.WriteString("      256 colors\r\n\n 16 basic colors\r\n\n ")
+	line := 5 // in mouse coords 1,1 start
 	for i := range 16 {
-		s.AP.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
+		s.write256color(i, 2*i+1, line)
 	}
 	s.AP.WriteString("\033[0m\r\n\r\n 216 cube\r\n")
+	line += 3
+	x := 1
 	for i := 16; i < 232; i++ {
 		if (i-16)%36 == 0 {
 			s.AP.WriteString("\033[0m\r\n ")
+			line++
+			x = 1
 		}
-		s.AP.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
+		s.write256color(i, x, line)
+		x += 2
 	}
 	s.AP.WriteString("\033[0m\r\n\r\n Grayscale\r\n\r\n ")
+	line += 4
+	x = 1
 	for i := 232; i < 256; i++ {
-		s.AP.WriteString(fmt.Sprintf("\033[48;5;%dm  ", i))
+		s.write256color(i, x, line)
+		x += 2
 	}
 	s.AP.WriteString(tcolor.Reset)
 }
 
 func (s *State) showHSLColors() {
+	clear(s.MouseAt)
 	s.AP.WriteString("HSL colors")
 	lightness := float64(s.Step) / 255.0
 	var hue, sat float64
@@ -226,6 +273,7 @@ func (s *State) showHSLColors() {
 			hue = float64(hh) / float64(s.AP.W)
 			// Use the lightness step for HSL colors
 			color := tcolor.HSLToRGB(hue, sat, lightness).Color()
+			s.MouseAt[[2]int{hh + 1, ll + 1}] = color
 			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
 		}
 	}
@@ -251,6 +299,7 @@ func (s *State) makeColor(xi, yi, zi int) (tcolor.Color, string) {
 }
 
 func (s *State) showRGBColors() {
+	clear(s.MouseAt)
 	s.AP.WriteString("RGB colors")
 	z := s.Step
 	var y, x int
@@ -266,6 +315,7 @@ func (s *State) showRGBColors() {
 			x = 255 * hh / (s.AP.W - 1)
 			// Use the step value for the selected RGB component
 			color, label = s.makeColor(x, y, z)
+			s.MouseAt[[2]int{hh + 1, l + 2}] = color
 			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
 		}
 	}
