@@ -2,7 +2,7 @@
 [![Go Report Card](https://goreportcard.com/badge/fortio.org/tcolor)](https://goreportcard.com/report/fortio.org/tcolor)
 [![CI Checks](https://github.com/fortio/tcolor/actions/workflows/include.yml/badge.svg)](https://github.com/fortio/tcolor/actions/workflows/include.yml)
 # tcolor
-Terminal Color chooser using Ansipixels library
+Terminal Color chooser using using the [Ansipixels](https://pkg.go.dev/fortio.org/terminal/ansipixels) TUI go library.
 
 `tcolor` is a simple terminal/TUI color picker/chooser/explorer.
 
