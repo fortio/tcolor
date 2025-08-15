@@ -6,6 +6,18 @@ Terminal Color chooser using Ansipixels library
 
 `tcolor` is a simple terminal/TUI color picker/chooser/explorer.
 
+Multiple modes (space bar to switch) from basic named colors, to 256 indexed:
+
+![256 colors](screenshot216.png)
+
+Hue, Saturation, Lightness:
+
+![HSL colors](screenshotHSL.png)
+
+3 RGB screens, eg:
+
+![RGB colors](screenshotRGB.png)
+
 ## Install
 You can get the binary from [releases](https://github.com/fortio/tcolor/releases)
 
