@@ -272,7 +272,7 @@ func (s *State) showHSLColors() {
 	clear(s.MouseAt)
 	s.Title = "HSL colors"
 	s.AP.WriteString(s.Title)
-	lightness := tcolor.Uint10(s.Step << 2)
+	lightness := tcolor.Uint10(s.Step << 2) //nolint:gosec // gosec not smart enough to see that 0-255<<2 is ok.
 	var sat tcolor.Uint8
 	var hue tcolor.Uint12
 	// leave bottom line for status
