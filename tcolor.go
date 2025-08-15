@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math"
 	"os"
 
 	"fortio.org/cli"
@@ -44,6 +45,7 @@ type State struct {
 	Dirty       bool                    // Used to track if the screen needs repainting
 	ColorOutput tcolor.ColorOutput      // For truecolor to 256 color support
 	MouseAt     map[[2]int]tcolor.Color // MouseAt tracks mouse positions and colors at those positions
+	Title       string                  // Title is the current title of the screen/mode.
 }
 
 func Main() int {
@@ -123,11 +125,17 @@ func Main() int {
 }
 
 func (s *State) OnMouse() {
+	s.AP.WriteAt(0, 0, s.Title)
+	s.AP.ClearEndOfLine()
 	x, y := s.AP.Mx, s.AP.My
 	if color, ok := s.MouseAt[[2]int{x, y}]; ok {
-		s.AP.WriteRight(s.AP.H-1, "    %s   %d,%d   %s %s", color.Background(), x, y, tcolor.Reset, color.String())
-	} else {
-		s.AP.WriteRight(s.AP.H-1, "            %d,%d           ", x, y)
+		t, v := color.Decode()
+		if t == tcolor.ColorTypeHSL {
+			s.AP.WriteRight(0, "%s   %d,%d   %s %s (%s)",
+				color.Background(), x, y, tcolor.Reset, color.String(), tcolor.ToRGB(t, v).String())
+		} else {
+			s.AP.WriteRight(0, "%s   %d,%d   %s %s", color.Background(), x, y, tcolor.Reset, color.String())
+		}
 	}
 	s.AP.MoveCursor(x-1, y-1)
 }
@@ -208,7 +216,8 @@ func (s *State) writeBasicColor(line int, i tcolor.BasicColor) int {
 
 func (s *State) show16colors() {
 	clear(s.MouseAt)
-	s.AP.WriteString("        Basic 16 colors\r\n\n")
+	s.Title = "        16 Basic Colors"
+	s.AP.WriteString(s.Title + "\r\n\n")
 	line := 3 // in mouse coords 1,1 start
 	for i := tcolor.Black; i <= tcolor.Gray; i++ {
 		line = s.writeBasicColor(line, i)
@@ -231,7 +240,8 @@ func (s *State) write256color(i, x, line int) {
 
 func (s *State) show256colors() {
 	clear(s.MouseAt)
-	s.AP.WriteString("      256 colors\r\n\n 16 basic colors\r\n\n ")
+	s.Title = "      256 colors"
+	s.AP.WriteString(s.Title + "\r\n\n 16 basic colors\r\n\n ")
 	line := 5 // in mouse coords 1,1 start
 	for i := range 16 {
 		s.write256color(i, 2*i+1, line)
@@ -260,24 +270,26 @@ func (s *State) show256colors() {
 
 func (s *State) showHSLColors() {
 	clear(s.MouseAt)
-	s.AP.WriteString("HSL colors")
-	lightness := float64(s.Step) / 255.0
-	var hue, sat float64
+	s.Title = "HSL colors"
+	s.AP.WriteString(s.Title)
+	lightness := tcolor.Uint10(s.Step << 2)
+	var sat tcolor.Uint8
+	var hue tcolor.Uint12
 	// leave bottom line for status
 	available := s.AP.H - 1 - 1
 	for ll := 1; ll < s.AP.H-1; ll++ {
 		s.AP.WriteString(tcolor.Reset + "\r\n")
 		offset := 8 // skip some of the gray-er colors (low saturation)
-		sat = float64(ll+offset) / float64(available+offset)
+		sat = tcolor.Uint8(math.Round(255. * float64(ll+offset) / float64(available+offset)))
 		for hh := range s.AP.W {
-			hue = float64(hh) / float64(s.AP.W)
+			hue = tcolor.Uint12(math.Round(4095 * float64(hh) / float64(s.AP.W)))
 			// Use the lightness step for HSL colors
-			color := tcolor.HSLToRGB(hue, sat, lightness).Color()
+			color := tcolor.HSLColor{H: hue, S: sat, L: lightness}.Color()
 			s.MouseAt[[2]int{hh + 1, ll + 1}] = color
 			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
 		}
 	}
-	s.AP.WriteAt(0, s.AP.H-1, "%sColor: Lightness=%.3f x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: Lightness=%d x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
 		tcolor.Reset, lightness, s.Step)
 }
 
@@ -300,7 +312,8 @@ func (s *State) makeColor(xi, yi, zi int) (tcolor.Color, string) {
 
 func (s *State) showRGBColors() {
 	clear(s.MouseAt)
-	s.AP.WriteString("RGB colors")
+	s.Title = "RGB colors"
+	s.AP.WriteString(s.Title)
 	z := s.Step
 	var y, x int
 	// leave bottom line for status
