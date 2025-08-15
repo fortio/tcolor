@@ -167,17 +167,18 @@ func (s *State) OnMouse() {
 		t, v := color.Decode()
 		colorString := color.String()
 		colorExtra := ""
+		clipBoardColor := colorString
 		if t == tcolor.ColorTypeHSL {
 			rgbColor := tcolor.ToRGB(t, v).String()
 			s.AP.WriteRight(0, "%s%s   %d,%d   %s %s (%s)",
 				extra, color.Background(), x, y, tcolor.Reset, colorString, rgbColor)
-			s.CopyToClipboard(rgbColor)
+			clipBoardColor = rgbColor
 			colorExtra = fmt.Sprintf(" (%s)", rgbColor)
 		} else {
 			s.AP.WriteRight(0, "%s%s   %d,%d   %s %s", extra, color.Background(), x, y, tcolor.Reset, colorString)
-			s.CopyToClipboard(colorString)
 		}
 		if click {
+			s.CopyToClipboard(clipBoardColor)
 			s.SavedColors.Add(fmt.Sprintf("%s    %s : %s%s",
 				color.Background(), tcolor.Reset, colorString, colorExtra))
 		}
