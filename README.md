@@ -2,7 +2,7 @@
 [![Go Report Card](https://goreportcard.com/badge/fortio.org/tcolor)](https://goreportcard.com/report/fortio.org/tcolor)
 [![CI Checks](https://github.com/fortio/tcolor/actions/workflows/include.yml/badge.svg)](https://github.com/fortio/tcolor/actions/workflows/include.yml)
 # tcolor
-Terminal Color chooser using Ansipixels library
+Terminal Color exploration using the [Ansipixels](https://pkg.go.dev/fortio.org/terminal/ansipixels) TUI go library.
 
 `tcolor` is a simple terminal/TUI color picker/chooser/explorer.
 
@@ -17,6 +17,10 @@ Hue, Saturation, Lightness:
 3 RGB screens, eg:
 
 ![RGB colors](screenshotRGB.png)
+
+Saved (clicked) colors on exit:
+
+![Saved colors](screenshotSavedColors.png)
 
 ## Install
 You can get the binary from [releases](https://github.com/fortio/tcolor/releases)
@@ -39,13 +43,18 @@ brew install fortio/tap/tcolor
 
 ## Run
 
-Currently 4 screens:
+Currently 4 screens (3 sub-screens in RGB):
 - Basic 16 colors
 - 256 Colors
 - 24 bits Hue Saturation Luminance (HSL)
 - 24 bits RGB where space bar change which component is set up/down with arrows. Space bar to switch component.
 
 Up and down arrows to increase luminance on the HSL screen, the third color component on the RGB screen.
+
+Move the mouse for color details.
+
+Click to copy the color code to the clipboard. They are also saved to be printed on exit (Q).
+
 
 ```sh
 tcolor help
