@@ -6,7 +6,7 @@ Terminal Color chooser using Ansipixels library
 
 `tcolor` is a simple terminal/TUI color picker/chooser/explorer.
 
-Multiple modes (space bar to switch) from basic named colors, to 256 indexed:
+Multiple modes (space bar and arrows to switch) from basic named colors, to 256 indexed:
 
 ![256 colors](screenshot216.png)
 
@@ -43,7 +43,7 @@ Currently 4 screens:
 - Basic 16 colors
 - 256 Colors
 - 24 bits Hue Saturation Luminance (HSL)
-- 24 bits RGB where space bar change which component is set with arrows.
+- 24 bits RGB where space bar change which component is set up/down with arrows. Space bar to switch component.
 
 Up and down arrows to increase luminance on the HSL screen, the third color component on the RGB screen.
 
