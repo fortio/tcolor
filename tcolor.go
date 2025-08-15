@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"fortio.org/cli"
 	"fortio.org/log"
 	"fortio.org/safecast"
+	"fortio.org/sets"
 	"fortio.org/terminal"
 	"fortio.org/terminal/ansipixels"
 	"fortio.org/terminal/ansipixels/tcolor"
@@ -46,6 +48,8 @@ type State struct {
 	ColorOutput tcolor.ColorOutput      // For truecolor to 256 color support
 	MouseAt     map[[2]int]tcolor.Color // MouseAt tracks mouse positions and colors at those positions
 	Title       string                  // Title is the current title of the screen/mode.
+	SavedColors sets.Set[string]        // SavedColors is a list of colors strings/info saved by the user.
+	ShowHelp    bool                    // ShowHelp is a flag to indicate if help should be shown.
 }
 
 func Main() int {
@@ -84,9 +88,12 @@ func Main() int {
 		Step:        128,          // Default lightness (128/255) for HSL colors
 		ColorOutput: colorOutput,
 		MouseAt:     make(map[[2]int]tcolor.Color),
+		SavedColors: sets.New[string](),
+		ShowHelp:    true,
 	}
 	ap.OnResize = func() error {
 		s.Dirty = true
+		s.ShowHelp = true // (re)Show help on resize
 		s.Repaint()
 		return nil
 	}
@@ -105,8 +112,23 @@ func Main() int {
 		c := ap.Data[0]
 		s.Dirty = true
 		switch c {
-		case 'q', 'Q':
-			log.Infof("Exiting on 'q' or 'Q'")
+		case 'q', 'Q', 3: // q Q or ctrl-c
+			if s.Mode == mode16Colors {
+				// clear the help text so we don't have to require more than 24 lines.
+				s.Dirty = true
+				s.Repaint()
+			}
+			s.AP.MoveCursor(0, 22)
+			s.AP.EndSyncMode()
+			if len(s.SavedColors) == 0 {
+				log.Infof("Exiting, no colors saved.")
+				return 0
+			}
+			fmt.Fprintf(crlfWriter, "Exiting. Saved colors: \n")
+			for _, color := range sets.Sort(s.SavedColors) {
+				fmt.Fprintf(crlfWriter, "  %s \n", color)
+			}
+			fmt.Fprintf(crlfWriter, "\n")
 			return 0
 		case 27: // ESC
 			if len(ap.Data) >= 3 && ap.Data[1] == '[' {
@@ -124,17 +146,40 @@ func Main() int {
 	}
 }
 
+// CopyToClipboard copies to system clipboard.
+// TODO: move to ansipixels.
+func (s *State) CopyToClipboard(text string) {
+	// Copy the given text to the clipboard
+	// OSC 52
+	s.AP.WriteString(fmt.Sprintf("\033]52;c;%s\007", base64.StdEncoding.EncodeToString([]byte(text))))
+}
+
 func (s *State) OnMouse() {
 	s.AP.WriteAt(0, 0, s.Title)
 	s.AP.ClearEndOfLine()
+	click := s.AP.MouseRelease()
 	x, y := s.AP.Mx, s.AP.My
-	if color, ok := s.MouseAt[[2]int{x, y}]; ok {
+	if color, ok := s.MouseAt[[2]int{x, y}]; ok { //nolint:nestif // well it's not that complicated and we need to do all this.
+		extra := ""
+		if click {
+			extra = "Copied "
+		}
 		t, v := color.Decode()
+		colorString := color.String()
+		colorExtra := ""
 		if t == tcolor.ColorTypeHSL {
-			s.AP.WriteRight(0, "%s   %d,%d   %s %s (%s)",
-				color.Background(), x, y, tcolor.Reset, color.String(), tcolor.ToRGB(t, v).String())
+			rgbColor := tcolor.ToRGB(t, v).String()
+			s.AP.WriteRight(0, "%s%s   %d,%d   %s %s (%s)",
+				extra, color.Background(), x, y, tcolor.Reset, colorString, rgbColor)
+			s.CopyToClipboard(rgbColor)
+			colorExtra = fmt.Sprintf(" (%s)", rgbColor)
 		} else {
-			s.AP.WriteRight(0, "%s   %d,%d   %s %s", color.Background(), x, y, tcolor.Reset, color.String())
+			s.AP.WriteRight(0, "%s%s   %d,%d   %s %s", extra, color.Background(), x, y, tcolor.Reset, colorString)
+			s.CopyToClipboard(colorString)
+		}
+		if click {
+			s.SavedColors.Add(fmt.Sprintf("%s    %s : %s%s",
+				color.Background(), tcolor.Reset, colorString, colorExtra))
 		}
 	}
 	s.AP.MoveCursor(x-1, y-1)
@@ -226,9 +271,14 @@ func (s *State) show16colors() {
 		line = s.writeBasicColor(line, i)
 	}
 	// Also show our extra orange
-	s.AP.WriteString("\r\n Extra ansipixel named color\r\n\n")
-	line += 3
+	s.AP.WriteString("\r\n Extra ansipixel named color\r\n")
+	line += 2
 	_ = s.writeBasicColor(line, tcolor.Orange)
+	if s.ShowHelp {
+		s.AP.WriteString("\r\n Use space and arrows to navigate, mouse to see and select colors,\r\n" +
+			" click to copy to clipboard and save for showing at the end (Q to exit)")
+		s.ShowHelp = false // Only show help once
+	}
 }
 
 func (s *State) write256color(i, x, line int) {
