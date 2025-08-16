@@ -18,7 +18,7 @@ Hue, Saturation, Lightness:
 
 ![RGB colors](screenshotRGB.png)
 
-Saved (clicked) colors on exit:
+Saved (clicked) colors on exit (and similar if you pass in colors as arguments):
 
 ![Saved colors](screenshotSavedColors.png)
 
@@ -43,7 +43,10 @@ brew install fortio/tap/tcolor
 
 ## Run
 
-Currently 4 screens (3 sub-screens in RGB):
+With no arguments/only flags:
+### Interactive
+
+Currently 4 interactive screens (3 sub-screens in RGB):
 - Basic 16 colors
 - 256 Colors
 - 24 bits Hue Saturation Luminance (HSL)
@@ -54,14 +57,30 @@ Up and down arrows to increase luminance on the HSL screen, the third color comp
 Move the mouse for color details.
 
 Click to copy the color code to the clipboard. They are also saved to be printed on exit (Q).
+If using a modifier or right clicking, the web HSL is copied instead of the #RRGGBB format.
 
+
+### Color decoding
+
+If you pass arguments to `tcolor` they will be decoded as colors and previewed, with various formats like
+
+```sh
+c101 # 101th color of the 256 palette
+red  # Name from the 16th basic color (+ Orange 17th named color), see list in first screen.
+RRGGBB # 6 hex RGB
+0.1,.4,.5 # float [0-1] hsl color
+hsl(300 40 50) # web css HSL format (degrees percentSaturation percentLightness)
+HSL#FFF_FF_200 # full resolution hex hsl (000-FFF hue, 00-FF saturation, 000-3FF lightness)
+# and more...
+```
 
 ```sh
 tcolor help
 ```
 ```
 flags:
-  -true-color
-        Use true color (24-bit RGB) instead of 8-bit ANSI colors (default is true if
-COLORTERM is set)
+  -rounding int
+        Number of digits to round HSL values for WebHSL output/copy paste (negative for default full precision) (default -1)
+  -truecolor
+        Use true color (24-bit RGB) instead of 8-bit ANSI colors (default is true if COLORTERM is set) (default true)
 ```
