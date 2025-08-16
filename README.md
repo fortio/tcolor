@@ -43,7 +43,7 @@ brew install fortio/tap/tcolor
 
 ## Run
 
-With no argumuents/only flags:
+With no arguments/only flags:
 ### Interactive
 
 Currently 4 interactive screens (3 sub-screens in RGB):
