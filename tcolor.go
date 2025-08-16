@@ -50,19 +50,26 @@ type State struct {
 	SavedColors  sets.Set[string]        // SavedColors is a list of colors strings/info saved by the user.
 	ShowHelp     bool                    // ShowHelp is a flag to indicate if help should be shown.
 	LastX, LastY int                     // LastX and LastY are the last mouse coordinates for the mouse event.
+	HSLRounding  int                     // HSLRounding is the number of digits to round HSL values for WebHSL output, default 2.
 }
 
 func Main() int {
-	cli.ArgsHelp = " explore colors"
+	cli.MaxArgs = -1
+	cli.ArgsHelp = "[colors] decode or explore colors"
 	fFps := flag.Float64("fps", 60, "Frames per second for the terminal refresh rate")
 	fTrueColor := flag.Bool("truecolor", ansipixels.DetectColorMode().TrueColor,
 		"Use true color (24-bit RGB) instead of 8-bit ANSI colors (default is true if COLORTERM is set)")
+	fRounding := flag.Int("rounding", -1,
+		"Number of digits to round HSL values for WebHSL output/copy paste (negative for default full precision)")
 	cli.Main()
 	colorOutput := tcolor.ColorOutput{TrueColor: *fTrueColor}
 	if colorOutput.TrueColor {
 		log.Infof("Using 24 bits true color")
 	} else {
 		log.Infof("Using 256 colors")
+	}
+	if flag.NArg() > 0 {
+		return decodeColors(colorOutput, *fRounding, flag.Args())
 	}
 	ap := ansipixels.NewAnsiPixels(*fFps)
 	if err := ap.Open(); err != nil {
@@ -90,6 +97,7 @@ func Main() int {
 		MouseAt:     make(map[[2]int]tcolor.Color),
 		SavedColors: sets.New[string](),
 		ShowHelp:    true,
+		HSLRounding: *fRounding,
 	}
 	ap.OnResize = func() error {
 		s.Dirty = true
@@ -163,11 +171,19 @@ func (s *State) OnMouse() {
 	s.AP.ClearEndOfLine()
 	colorString, colorExtra, ctype := color.Extra()
 	clipBoardColor := colorString
+	webHSL := tcolor.WebHSL(color, s.HSLRounding)
 	if ctype == tcolor.ColorTypeHSL {
-		clipBoardColor = colorExtra
+		if s.AP.AnyModifier() || s.AP.RightClick() {
+			clipBoardColor = webHSL
+		} else {
+			clipBoardColor = colorExtra
+		}
 	}
 	if colorExtra != "" {
 		colorExtra = " (" + colorExtra + ")"
+	}
+	if webHSL != "" {
+		colorExtra += " " + webHSL
 	}
 	extra := ""
 	if click {
