@@ -151,17 +151,14 @@ func (s *State) OnMouse() {
 	color, ok := s.MouseAt[[2]int{x, y}]
 	click := s.AP.MouseRelease()
 	doUpdate := click || s.LastX != x || s.LastY != y
+	s.LastX, s.LastY = x, y
 	if !doUpdate {
-		if s.LastX == -1 {
-			s.LastX, s.LastY = x, y
-		}
 		s.AP.MoveCursor(s.LastX-1, s.LastY-1)
 		return
 	}
 	if !ok {
 		return
 	}
-	s.LastX, s.LastY = x, y
 	s.AP.WriteAt(0, 0, s.Title)
 	s.AP.ClearEndOfLine()
 	colorString, colorExtra, ctype := color.Extra()
