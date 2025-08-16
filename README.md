@@ -18,7 +18,7 @@ Hue, Saturation, Lightness:
 
 ![RGB colors](screenshotRGB.png)
 
-Saved (clicked) colors on exit:
+Saved (clicked) colors on exit (and similar if you pass in colors as arguments):
 
 ![Saved colors](screenshotSavedColors.png)
 
