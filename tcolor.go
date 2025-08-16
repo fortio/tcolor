@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"math"
@@ -40,16 +39,17 @@ const (
 )
 
 type State struct {
-	AP          *ansipixels.AnsiPixels
-	Mode        mode
-	Step        int                     // Step is the lightness step for HSL colors, other color for RGB. 0-255
-	Component   component               // Component is the current color component missing/adjusted with arrows in RGB mode
-	Dirty       bool                    // Used to track if the screen needs repainting
-	ColorOutput tcolor.ColorOutput      // For truecolor to 256 color support
-	MouseAt     map[[2]int]tcolor.Color // MouseAt tracks mouse positions and colors at those positions
-	Title       string                  // Title is the current title of the screen/mode.
-	SavedColors sets.Set[string]        // SavedColors is a list of colors strings/info saved by the user.
-	ShowHelp    bool                    // ShowHelp is a flag to indicate if help should be shown.
+	AP           *ansipixels.AnsiPixels
+	Mode         mode
+	Step         int                     // Step is the lightness step for HSL colors, other color for RGB. 0-255
+	Component    component               // Component is the current color component missing/adjusted with arrows in RGB mode
+	Dirty        bool                    // Used to track if the screen needs repainting
+	ColorOutput  tcolor.ColorOutput      // For truecolor to 256 color support
+	MouseAt      map[[2]int]tcolor.Color // MouseAt tracks mouse positions and colors at those positions
+	Title        string                  // Title is the current title of the screen/mode.
+	SavedColors  sets.Set[string]        // SavedColors is a list of colors strings/info saved by the user.
+	ShowHelp     bool                    // ShowHelp is a flag to indicate if help should be shown.
+	LastX, LastY int                     // LastX and LastY are the last mouse coordinates for the mouse event.
 }
 
 func Main() int {
@@ -146,42 +146,38 @@ func Main() int {
 	}
 }
 
-// CopyToClipboard copies to system clipboard.
-// TODO: move to ansipixels.
-func (s *State) CopyToClipboard(text string) {
-	// Copy the given text to the clipboard
-	// OSC 52
-	s.AP.WriteString(fmt.Sprintf("\033]52;c;%s\007", base64.StdEncoding.EncodeToString([]byte(text))))
-}
-
 func (s *State) OnMouse() {
+	x, y := s.AP.Mx, s.AP.My
+	color, ok := s.MouseAt[[2]int{x, y}]
+	click := s.AP.MouseRelease()
+	doUpdate := click || s.LastX != x || s.LastY != y
+	s.LastX, s.LastY = x, y
+	if !doUpdate {
+		s.AP.MoveCursor(s.LastX-1, s.LastY-1)
+		return
+	}
+	if !ok {
+		return
+	}
 	s.AP.WriteAt(0, 0, s.Title)
 	s.AP.ClearEndOfLine()
-	click := s.AP.MouseRelease()
-	x, y := s.AP.Mx, s.AP.My
-	if color, ok := s.MouseAt[[2]int{x, y}]; ok { //nolint:nestif // well it's not that complicated and we need to do all this.
-		extra := ""
-		if click {
-			extra = "Copied "
-		}
-		t, v := color.Decode()
-		colorString := color.String()
-		colorExtra := ""
-		clipBoardColor := colorString
-		if t == tcolor.ColorTypeHSL {
-			rgbColor := tcolor.ToRGB(t, v).String()
-			s.AP.WriteRight(0, "%s%s   %d,%d   %s %s (%s)",
-				extra, color.Background(), x, y, tcolor.Reset, colorString, rgbColor)
-			clipBoardColor = rgbColor
-			colorExtra = fmt.Sprintf(" (%s)", rgbColor)
-		} else {
-			s.AP.WriteRight(0, "%s%s   %d,%d   %s %s", extra, color.Background(), x, y, tcolor.Reset, colorString)
-		}
-		if click {
-			s.CopyToClipboard(clipBoardColor)
-			s.SavedColors.Add(fmt.Sprintf("%s    %s : %s%s",
-				color.Background(), tcolor.Reset, colorString, colorExtra))
-		}
+	colorString, colorExtra, ctype := color.Extra()
+	clipBoardColor := colorString
+	if ctype == tcolor.ColorTypeHSL {
+		clipBoardColor = colorExtra
+	}
+	if colorExtra != "" {
+		colorExtra = " (" + colorExtra + ")"
+	}
+	extra := ""
+	if click {
+		extra = "Copied "
+	}
+	s.AP.WriteRight(0, "%s%s   %d,%d   %s %s%s", extra, color.Background(), x, y, tcolor.Reset, colorString, colorExtra)
+	if click {
+		s.AP.CopyToClipboard(clipBoardColor)
+		s.SavedColors.Add(fmt.Sprintf("%s    %s : %s%s",
+			color.Background(), tcolor.Reset, colorString, colorExtra))
 	}
 	s.AP.MoveCursor(x-1, y-1)
 }
@@ -237,19 +233,19 @@ func (s *State) Repaint() {
 		s.AP.ClearScreen()
 		switch s.Mode {
 		case mode16Colors:
-			s.show16colors()
+			s.Show16colors()
 		case mode256Colors:
-			s.show256colors()
+			s.Show256colors()
 		case modeHSLColors:
-			s.showHSLColors()
+			s.ShowHSLColors()
 		case modeRGBColors:
-			s.showRGBColors()
+			s.ShowRGBColors()
 		default:
 			panic("invalid mode")
 		}
+		s.OnMouse()
 		s.Dirty = false
 	}
-	s.OnMouse()
 }
 
 func (s *State) writeBasicColor(line int, i tcolor.BasicColor) int {
@@ -260,10 +256,9 @@ func (s *State) writeBasicColor(line int, i tcolor.BasicColor) int {
 	return line + 1
 }
 
-func (s *State) show16colors() {
-	clear(s.MouseAt)
-	s.Title = "        16 Basic Colors"
-	s.AP.WriteString(s.Title + "\r\n\n")
+func (s *State) Show16colors() {
+	s.NewPage("        16 Basic Colors")
+	s.AP.WriteString("\r\n\n")
 	line := 3 // in mouse coords 1,1 start
 	for i := tcolor.Black; i <= tcolor.Gray; i++ {
 		line = s.writeBasicColor(line, i)
@@ -277,25 +272,24 @@ func (s *State) show16colors() {
 	_ = s.writeBasicColor(line, tcolor.Orange)
 	if s.ShowHelp {
 		s.AP.WriteString("\r\n Use space and arrows to navigate, mouse to see and select colors,\r\n" +
-			" click to copy to clipboard and save for showing at the end (Q to exit)")
+			" click to copy to clipboard and save for showing at the end (Q to exit) ")
 		s.ShowHelp = false // Only show help once
 	}
 }
 
-func (s *State) write256color(i, x, line int) {
-	c := tcolor.Color256(i)
+func (s *State) write256color(i tcolor.Uint8, x, line int) {
+	c := tcolor.Color256(i).Color()
 	s.MouseAt[[2]int{x + 1, line}] = c
 	s.MouseAt[[2]int{x + 2, line}] = c
 	s.AP.WriteString(c.Background() + "  ")
 }
 
-func (s *State) show256colors() {
-	clear(s.MouseAt)
-	s.Title = "      256 colors"
-	s.AP.WriteString(s.Title + "\r\n\n 16 basic colors\r\n\n ")
+func (s *State) Show256colors() {
+	s.NewPage("      256 colors")
+	s.AP.WriteString("\r\n\n 16 basic colors\r\n\n ")
 	line := 5 // in mouse coords 1,1 start
 	for i := range 16 {
-		s.write256color(i, 2*i+1, line)
+		s.write256color(tcolor.Uint8(i), 2*i+1, line) //nolint:gosec // duh 0-16 overflows, right...
 	}
 	s.AP.WriteString("\033[0m\r\n\r\n 216 cube\r\n")
 	line += 3
@@ -306,23 +300,28 @@ func (s *State) show256colors() {
 			line++
 			x = 1
 		}
-		s.write256color(i, x, line)
+		s.write256color(tcolor.Uint8(i), x, line) //nolint:gosec // duh 16-231 overflows, right...
 		x += 2
 	}
 	s.AP.WriteString("\033[0m\r\n\r\n Grayscale\r\n\r\n ")
 	line += 4
 	x = 1
 	for i := 232; i < 256; i++ {
-		s.write256color(i, x, line)
+		s.write256color(tcolor.Uint8(i), x, line) //nolint:gosec // duh 232-255 overflows, right...
 		x += 2
 	}
-	s.AP.WriteString(tcolor.Reset)
+	s.AP.WriteString(tcolor.Reset + "\r\n\n")
 }
 
-func (s *State) showHSLColors() {
+func (s *State) NewPage(title string) {
 	clear(s.MouseAt)
-	s.Title = "HSL colors"
+	s.LastX, s.LastY = -1, -1 // Reset last mouse position
+	s.Title = title
 	s.AP.WriteString(s.Title)
+}
+
+func (s *State) ShowHSLColors() {
+	s.NewPage("HSL colors")
 	lightness := tcolor.Uint10(s.Step << 2) //nolint:gosec // gosec not smart enough to see that 0-255<<2 is ok.
 	var sat tcolor.Uint8
 	var hue tcolor.Uint12
@@ -361,10 +360,8 @@ func (s *State) makeColor(xi, yi, zi int) (tcolor.Color, string) {
 	}
 }
 
-func (s *State) showRGBColors() {
-	clear(s.MouseAt)
-	s.Title = "RGB colors"
-	s.AP.WriteString(s.Title)
+func (s *State) ShowRGBColors() {
+	s.NewPage("RGB colors")
 	z := s.Step
 	var y, x int
 	// leave bottom line for status
