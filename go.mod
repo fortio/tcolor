@@ -7,7 +7,7 @@ require (
 	fortio.org/log v1.17.2
 	fortio.org/safecast v1.2.0
 	fortio.org/sets v1.3.0
-	fortio.org/terminal v0.52.2
+	fortio.org/terminal v0.54.0
 )
 
 require (
