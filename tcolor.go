@@ -44,7 +44,6 @@ type State struct {
 	Step         int                     // Step is the lightness step for HSL colors, other color for RGB. 0-255
 	Component    component               // Component is the current color component missing/adjusted with arrows in RGB mode
 	Dirty        bool                    // Used to track if the screen needs repainting
-	ColorOutput  tcolor.ColorOutput      // For truecolor to 256 color support
 	MouseAt      map[[2]int]tcolor.Color // MouseAt tracks mouse positions and colors at those positions
 	Title        string                  // Title is the current title of the screen/mode.
 	SavedColors  sets.Set[string]        // SavedColors is a list of colors strings/info saved by the user.
@@ -62,16 +61,16 @@ func Main() int {
 	fRounding := flag.Int("rounding", -1,
 		"Number of digits to round HSL values for WebHSL output/copy paste (negative for default full precision)")
 	cli.Main()
-	colorOutput := tcolor.ColorOutput{TrueColor: *fTrueColor}
-	if colorOutput.TrueColor {
+	ap := ansipixels.NewAnsiPixels(*fFps)
+	ap.TrueColor = *fTrueColor
+	if ap.TrueColor {
 		log.Infof("Using 24 bits true color")
 	} else {
 		log.Infof("Using 256 colors")
 	}
 	if flag.NArg() > 0 {
-		return decodeColors(colorOutput, *fRounding, flag.Args())
+		return decodeColors(ap.ColorOutput, *fRounding, flag.Args())
 	}
-	ap := ansipixels.NewAnsiPixels(*fFps)
 	if err := ap.Open(); err != nil {
 		return log.FErrf("Error opening terminal: %v", err)
 	}
@@ -93,7 +92,6 @@ func Main() int {
 		AP:          ap,
 		Mode:        mode16Colors, // Start with 16 colors
 		Step:        128,          // Default lightness (128/255) for HSL colors
-		ColorOutput: colorOutput,
 		MouseAt:     make(map[[2]int]tcolor.Color),
 		SavedColors: sets.New[string](),
 		ShowHelp:    true,
@@ -352,7 +350,8 @@ func (s *State) ShowHSLColors() {
 			// Use the lightness step for HSL colors
 			color := tcolor.HSLColor{H: hue, S: sat, L: lightness}.Color()
 			s.MouseAt[[2]int{hh + 1, ll + 1}] = color
-			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
+			s.AP.WriteBg(color)
+			s.AP.WriteRune(' ')
 		}
 	}
 	s.AP.WriteAt(0, s.AP.H-1, "%sColor: Lightness=%d x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
@@ -393,7 +392,8 @@ func (s *State) ShowRGBColors() {
 			// Use the step value for the selected RGB component
 			color, label = s.makeColor(x, y, z)
 			s.MouseAt[[2]int{hh + 1, l + 2}] = color
-			s.AP.WriteString(s.ColorOutput.Background(color) + " ")
+			s.AP.WriteBg(color)
+			s.AP.WriteRune(' ')
 		}
 	}
 	s.AP.WriteAt(0, s.AP.H-1, "%sColor: %s=%d x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
