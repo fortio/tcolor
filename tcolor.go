@@ -380,7 +380,7 @@ func (s *State) ShowOKLCHColors() {
 		c = float64(ll) / float64(available)
 		for hh := range s.AP.W {
 			h = float64(hh) / float64(s.AP.W)
-			// Use the lightness step for HSL colors
+			// Use the lightness step for OKLCH colors
 			color := tcolor.Oklchf(l, c, h)
 			s.MouseAt[[2]int{hh + 1, ll + 1}] = color
 			s.AP.WriteBg(color)
