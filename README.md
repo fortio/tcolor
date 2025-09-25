@@ -14,6 +14,10 @@ Hue, Saturation, Lightness:
 
 ![HSL colors](screenshotHSL.png)
 
+[OKLCH](https://oklch.com/) mode:
+
+![OKLCH colors](screenshotOKLCH.png)
+
 3 RGB screens, eg:
 
 ![RGB colors](screenshotRGB.png)
@@ -46,10 +50,11 @@ brew install fortio/tap/tcolor
 With no arguments/only flags:
 ### Interactive
 
-Currently 4 interactive screens (3 sub-screens in RGB):
+Currently 5 interactive screens (3 sub-screens in RGB):
 - Basic 16 colors
 - 256 Colors
 - 24 bits Hue Saturation Luminance (HSL)
+- OKLCH mode
 - 24 bits RGB where space bar change which component is set up/down with arrows. Space bar to switch component.
 
 Up and down arrows to increase luminance on the HSL screen, the third color component on the RGB screen.
@@ -57,7 +62,8 @@ Up and down arrows to increase luminance on the HSL screen, the third color comp
 Move the mouse for color details.
 
 Click to copy the color code to the clipboard. They are also saved to be printed on exit (Q).
-If using a modifier or right clicking, the web HSL is copied instead of the #RRGGBB format.
+If using right clicking, the web HSL is copied instead of the #RRGGBB format.
+If using a modifier while clicking, the web OKLCH is copied instead of rgb format.
 
 
 ### Color decoding
@@ -71,6 +77,7 @@ RRGGBB # 6 hex RGB
 0.1,.4,.5 # float [0-1] hsl color
 hsl(300 40 50) # web css HSL format (degrees percentSaturation percentLightness)
 HSL#FFF_FF_200 # full resolution hex hsl (000-FFF hue, 00-FF saturation, 000-3FF lightness)
+oklch(0.53 0.12 243) # web oklch color space https://oklch.com/#0.53,0.12,243,100
 # and more...
 ```
 
