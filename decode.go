@@ -17,7 +17,8 @@ func decodeColors(colorOutput tcolor.ColorOutput, rounding int, args []string) i
 		}
 		name, rgb, _ := color.Extra()
 		hsl := tcolor.WebHSL(color, rounding)
-		fmt.Printf(" %s    %s %s %s %s\n", colorOutput.Background(color), tcolor.Reset, name, rgb, hsl)
+		oklch := tcolor.WebOklch(color, rounding)
+		fmt.Printf(" %s    %s %s %s %s %s\n", colorOutput.Background(color), tcolor.Reset, name, rgb, hsl, oklch)
 	}
 	return 0
 }

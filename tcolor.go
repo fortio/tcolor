@@ -25,6 +25,7 @@ const (
 	mode16Colors mode = iota
 	mode256Colors
 	modeHSLColors
+	modeOKLCHColors
 	modeRGBColors
 	maxMode
 )
@@ -49,7 +50,7 @@ type State struct {
 	SavedColors  sets.Set[string]        // SavedColors is a list of colors strings/info saved by the user.
 	ShowHelp     bool                    // ShowHelp is a flag to indicate if help should be shown.
 	LastX, LastY int                     // LastX and LastY are the last mouse coordinates for the mouse event.
-	HSLRounding  int                     // HSLRounding is the number of digits to round HSL values for WebHSL output, default 2.
+	Rounding     int                     // Rounding is the number of digits to round HSL/OKLCH values for WebHSL/OKLCH output.
 }
 
 func Main() int {
@@ -59,7 +60,7 @@ func Main() int {
 	fTrueColor := flag.Bool("truecolor", ansipixels.DetectColorMode().TrueColor,
 		"Use true color (24-bit RGB) instead of 8-bit ANSI colors (default is true if COLORTERM is set)")
 	fRounding := flag.Int("rounding", -1,
-		"Number of digits to round HSL values for WebHSL output/copy paste (negative for default full precision)")
+		"Number of digits to round HSL/OKLCH values for WebHSL/OKLCH output/copy paste (negative for default full precision)")
 	cli.Main()
 	ap := ansipixels.NewAnsiPixels(*fFps)
 	ap.TrueColor = *fTrueColor
@@ -95,7 +96,7 @@ func Main() int {
 		MouseAt:     make(map[[2]int]tcolor.Color),
 		SavedColors: sets.New[string](),
 		ShowHelp:    true,
-		HSLRounding: *fRounding,
+		Rounding:    *fRounding,
 	}
 	ap.OnResize = func() error {
 		s.Dirty = true
@@ -169,11 +170,15 @@ func (s *State) OnMouse() {
 	s.AP.ClearEndOfLine()
 	colorString, colorExtra, ctype := color.Extra()
 	clipBoardColor := colorString
-	webHSL := tcolor.WebHSL(color, s.HSLRounding)
-	if ctype == tcolor.ColorTypeHSL {
-		if s.AP.AnyModifier() || s.AP.RightClick() {
+	webHSL := tcolor.WebHSL(color, s.Rounding)
+	webOKLCH := tcolor.WebOklch(color, s.Rounding)
+	if ctype == tcolor.ColorTypeHSL || ctype == tcolor.ColorTypeRGB {
+		switch {
+		case s.AP.RightClick():
 			clipBoardColor = webHSL
-		} else {
+		case s.AP.AnyModifier():
+			clipBoardColor = webOKLCH
+		default:
 			clipBoardColor = colorExtra
 		}
 	}
@@ -182,6 +187,9 @@ func (s *State) OnMouse() {
 	}
 	if webHSL != "" {
 		colorExtra += " " + webHSL
+	}
+	if webOKLCH != "" {
+		colorExtra += " " + webOKLCH
 	}
 	extra := ""
 	if click {
@@ -252,6 +260,8 @@ func (s *State) Repaint() {
 			s.Show256colors()
 		case modeHSLColors:
 			s.ShowHSLColors()
+		case modeOKLCHColors:
+			s.ShowOKLCHColors()
 		case modeRGBColors:
 			s.ShowRGBColors()
 		default:
@@ -356,6 +366,29 @@ func (s *State) ShowHSLColors() {
 	}
 	s.AP.WriteAt(0, s.AP.H-1, "%sColor: Lightness=%d x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
 		tcolor.Reset, lightness, s.Step)
+}
+
+func (s *State) ShowOKLCHColors() {
+	s.NewPage("OKLCH colors")
+	l := float64(s.Step) / 255.
+	var c float64
+	var h float64
+	// leave bottom line for status
+	available := s.AP.H - 1 - 1
+	for ll := 1; ll < s.AP.H-1; ll++ {
+		s.AP.WriteString(tcolor.Reset + "\r\n")
+		c = float64(ll) / float64(available)
+		for hh := range s.AP.W {
+			h = float64(hh) / float64(s.AP.W)
+			// Use the lightness step for HSL colors
+			color := tcolor.Oklchf(l, c, h)
+			s.MouseAt[[2]int{hh + 1, ll + 1}] = color
+			s.AP.WriteBg(color)
+			s.AP.WriteRune(' ')
+		}
+	}
+	s.AP.WriteAt(0, s.AP.H-1, "%sColor: L=%.3f x%X ↑ to increase ↓ to decrease (shift for precise steps) ",
+		tcolor.Reset, l, s.Step)
 }
 
 func (s *State) makeColor(xi, yi, zi int) (tcolor.Color, string) {
