@@ -166,7 +166,7 @@ func (s *State) OnMouse() {
 	if !ok {
 		return
 	}
-	s.AP.WriteAt(0, 0, s.Title)
+	s.AP.WriteAtStr(0, 0, s.Title)
 	s.AP.ClearEndOfLine()
 	colorString, colorExtra, ctype := color.Extra()
 	clipBoardColor := colorString
