@@ -108,6 +108,7 @@ func Main() int {
 	s.Dirty = true
 	for {
 		s.Repaint()
+		s.AP.EndSyncMode()
 		if err := ap.ReadOrResizeOrSignal(); err != nil {
 			return log.FErrf("Error reading terminal: %v", err)
 		}
