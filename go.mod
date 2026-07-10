@@ -7,7 +7,7 @@ require (
 	fortio.org/log v1.18.3
 	fortio.org/safecast v1.2.0
 	fortio.org/sets v1.3.0
-	fortio.org/terminal v0.65.2
+	fortio.org/terminal v0.65.3
 )
 
 require (
@@ -17,7 +17,7 @@ require (
 	github.com/kortschak/goroutine v1.1.3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	golang.org/x/crypto/x509roots/fallback v0.0.0-20250406160420-959f8f3db0fb // indirect
-	golang.org/x/image v0.42.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/term v0.44.0 // indirect
+	golang.org/x/image v0.44.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
 )
