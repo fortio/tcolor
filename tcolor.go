@@ -314,7 +314,7 @@ func (s *State) Show256colors() {
 	s.AP.WriteString("\r\n\n 16 basic colors\r\n\n ")
 	line := 5 // in mouse coords 1,1 start
 	for i := range 16 {
-		s.write256color(tcolor.Uint8(i), 2*i+1, line) //nolint:gosec // duh 0-16 overflows, right...
+		s.write256color(tcolor.Uint8(i), 2*i+1, line)
 	}
 	s.AP.WriteString("\033[0m\r\n\r\n 216 cube\r\n")
 	line += 3
@@ -325,14 +325,14 @@ func (s *State) Show256colors() {
 			line++
 			x = 1
 		}
-		s.write256color(tcolor.Uint8(i), x, line) //nolint:gosec // duh 16-231 overflows, right...
+		s.write256color(tcolor.Uint8(i), x, line)
 		x += 2
 	}
 	s.AP.WriteString("\033[0m\r\n\r\n Grayscale\r\n\r\n ")
 	line += 4
 	x = 1
 	for i := 232; i < 256; i++ {
-		s.write256color(tcolor.Uint8(i), x, line) //nolint:gosec // duh 232-255 overflows, right...
+		s.write256color(tcolor.Uint8(i), x, line)
 		x += 2
 	}
 	s.AP.WriteString(tcolor.Reset + "\r\n\n")
